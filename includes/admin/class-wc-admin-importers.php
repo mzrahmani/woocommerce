@@ -227,16 +227,23 @@ class WC_Admin_Importers {
 		// Log failures.
 		if ( 0 !== $params['start_pos'] ) {
 			$error_log = array_filter( (array) get_user_option( 'product_import_error_log' ) );
+			// record each batch complete result 
+			$import_log = array_filter( (array) get_user_option( 'product_import_log' ) );
 		} else {
 			$error_log = array();
+			$import_log = array();
 		}
 
 		$importer         = WC_Product_CSV_Importer_Controller::get_importer( $file, $params );
 		$results          = $importer->import();
 		$percent_complete = $importer->get_percent_complete();
 		$error_log        = array_merge( $error_log, $results['failed'], $results['skipped'] );
+		$import_log['updated']        = array_merge( $import_log['updated'], $results['updated'] );
+		$import_log['imported']        = array_merge( $import_log['imported'], $results['imported'] );
+		
 
 		update_user_option( get_current_user_id(), 'product_import_error_log', $error_log );
+		update_user_option( get_current_user_id(), 'product_import_log', $import_log );
 
 		if ( 100 === $percent_complete ) {
 			// @codingStandardsIgnoreStart.
@@ -275,7 +282,11 @@ class WC_Admin_Importers {
 				AND tt.taxonomy IN ( '" . implode( "','", array_map( 'esc_sql', get_object_taxonomies( 'product' ) ) ) . "' )
 			" );
 			// @codingStandardsIgnoreEnd.
-
+			
+			
+			// add action at the end of the import process
+			do_action('woocommerce_product_import_completed',$import_log,$error_log);
+			
 			// Send success.
 			wp_send_json_success(
 				array(
@@ -289,6 +300,9 @@ class WC_Admin_Importers {
 				)
 			);
 		} else {
+			// add action at the end of the batch import success
+			do_action('woocommerce_product_import_batch_imported',$importer->get_file_position(),$percent_complete,$results);
+			
 			wp_send_json_success(
 				array(
 					'position'   => $importer->get_file_position(),
